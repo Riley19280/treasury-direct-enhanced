@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "Treasury Direct Enhanced",
+    "version": "1.0",
+    "description": "Provide additional data when browsing the treasury direct website",
+    "icons": { 
+        "128": "images/logo-128.png"
+    },
+    "action": {
+    "default_popup": "popup.html",
+    "default_icon": "images/logo-128.png"
+    },
+    "content_scripts": [
+        {
+            "js": [
+                "scripts/luxon-3.3.0.js",
+                "scripts/main.js"
+            ],
+            "matches": [
+                "https://*.treasurydirect.gov/*"
+            ]
+        }
+    ]
+  }
