@@ -71,6 +71,59 @@ function addMaturityDateToTable(table) {
     })
 }
 
+function tableToJson(table) {
+    const tableHeaders = Array.from(table.querySelectorAll('th')).map(c => c.textContent.toLowerCase().replace(/ /g, '_'))
+
+    const data = []
+
+    table.querySelectorAll('tr').forEach((tableRow) => {
+        const cells = tableRow.querySelectorAll('td')
+
+        const cellContents = Array.from(cells).map(c => c.textContent)
+
+        if(cellContents.length !== tableHeaders.length) return
+
+        const datapoint = {}
+
+        for(let i = 0; i < tableHeaders.length; i++) {
+            if(tableHeaders[i] === '') continue
+            datapoint[tableHeaders[i]] = cellContents[i]
+        }
+
+        data.push(datapoint)
+
+    })
+
+    return data
+}
+
+function objectToTable(objects) {
+    if (objects.length === 0) return '<table></table>'
+
+    let str = '<table class="border">'
+
+    str += '<tr>'
+    Object.keys(objects[0]).map(key => {
+        if(key[0] === '_') return
+        str += `<th>${key.split('_').map(x => x.charAt(0).toUpperCase()+ x.slice(1)).join(' ')}</th>`
+    })
+    str += '</tr>'
+
+   objects.map((o, idx) => {
+    str += `<tr class="${idx % 2 === 0 ? 'altrow1' : 'altrow2'} ${o._classes}">`
+    Object.entries(o).map(([key, val]) => {
+        if(key[0] === '_') return
+
+       str += `<td>${val}</td>`
+    })
+    str += '</tr>'
+   })
+
+
+    str += '</table>'
+    return str
+}
+
 async function addLastRateToTables() {
     const buyPageType = document.querySelector('h1 + p')?.textContent.replace('Purchase a ', '').replace(/[^\w ]/g, '').toLowerCase()
 
@@ -119,7 +172,7 @@ async function addLastRateToTables() {
 
     if(!purchaseType) return
 
-    const url  = `https://www.treasurydirect.gov/TA_WS/securities/auctioned?pagesize=20&type=${purchaseType.filter}&format=json`
+    const url  = `https://www.treasurydirect.gov/TA_WS/securities/auctioned?pagesize=50&type=${purchaseType.filter}&format=json`
     const key = `${purchaseType.filter}-auctions`
     
     const data = await chrome.storage.local.get([key])
@@ -160,7 +213,7 @@ async function addLastRateToTables() {
 
             const datapoint = data.find(d => d.securityTerm.toLowerCase() === rawTermText.toLowerCase())
 
-            const number = datapoint[purchaseType.datapoint_field]
+            const number = datapoint ? datapoint[purchaseType.datapoint_field] : undefined
         
             cells[cells.length - 1].insertAdjacentHTML('afterend', `<td>${number ? parseFloat(number).toFixed(datapoint.competitiveBidDecimals) + '%' : ''}</td>`)
         })
@@ -195,5 +248,145 @@ if(document.querySelector('title').textContent === 'BuyDirect - Confirmation') {
 
             tableRow.insertAdjacentHTML('afterend', `<tr><td class="alignrighttop"><strong>Maturity Date:</strong></td><td colspan="3">${matureDate}</td></tr>`)
         }
+    })
+}
+
+
+if(
+    document.querySelector('title').textContent ==='Current Holdings - Summary' && 
+    document.querySelector('h3').textContent === 'Treasury Bills'
+) {
+    chrome.storage.local.set({ 
+        current_bill_holdings: {
+            data: tableToJson(document.querySelectorAll('table')[1]),
+            timestamp: (new Date).getTime()
+        } 
+    })
+}
+
+
+if(
+    document.querySelector('title').textContent ==='Current Holdings - Pending Transactions - Summary List' && 
+    document.querySelector('h3').textContent === 'Pending Purchases'
+) {
+    
+    chrome.storage.local.set({ 
+        pending_certificate_of_indebtedness: {
+            data: tableToJson(document.querySelectorAll('table')[0]),
+            timestamp: (new Date).getTime()
+        },
+        pending_marketable_securities: {
+            data: tableToJson(document.querySelectorAll('table')[1]),
+            timestamp: (new Date).getTime()
+        },
+        pending_savings_bonds: {
+            data: tableToJson(document.querySelectorAll('table')[2]),
+            timestamp: (new Date).getTime()
+        },
+        pending_reinvestments: {
+            data: tableToJson(document.querySelectorAll('table')[3]),
+            timestamp: (new Date).getTime()
+        },
+    }).then(() => {
+        'Saved data'
+    })
+    .catch(err => console.error(err)) 
+}
+
+if(
+    document.querySelector('title').textContent ==='BuyDirect Marketables' && 
+    document.querySelector('h1 + p').textContent === 'Purchase a Treasury Bill.'
+) {
+    const topMargin = document.querySelector('table').offsetTop - document.querySelector('#content').offsetTop
+    document.querySelector('#content').style.display = 'flex'
+
+    document.querySelector('#content form').style.width = '730px'
+    document.querySelector('#content').style.width = 'auto'
+
+    document.querySelector('head style').insertAdjacentHTML('beforeend', `\n #content tr.highlight { background-color: yellow; }`)
+
+    document.querySelector('#content').insertAdjacentHTML('beforeend', `<div id="tbill-ladder" style="margin-left: 6px; margin-top: ${topMargin}px; flex-grow: 1; min-width: 200px;"></div>`)
+
+    const requiredDataKeys = [
+        'current_bill_holdings',
+        'pending_reinvestments',
+        'pending_marketable_securities'
+    ]
+
+    chrome.storage.local.get(requiredDataKeys)
+    .then((result) => {
+        const failedKeys = []
+        
+        for(const key of requiredDataKeys) {
+            if(!result[key]) {
+                document.querySelector('#tbill-ladder').insertAdjacentHTML('afterbegin', `<div>Missing required data: ${key.split('_').map(x => x.charAt(0).toUpperCase()+ x.slice(1)).join(' ')}</div>`)
+            }
+        }
+
+        if(failedKeys.length !== 0) return
+
+        function computeTBillLadder() {
+            document.querySelector('#tbill-ladder').childNodes.forEach(x => x.remove())
+
+            let normalizedAggergate = []
+
+            result.current_bill_holdings.data.map(x => {
+                normalizedAggergate.push({
+                    term: x.term,
+                    issue_date: x.issue_date,
+                    maturity_date: x.maturity_date,
+                })
+            })
+    
+            result.pending_marketable_securities.data.map(x => {
+                normalizedAggergate.push({
+                    term: x.security_type.replace(/ Bill$/, ''),
+                    issue_date: x.issue_date,
+                    maturity_date: x.maturity_date,
+                })
+            })
+
+            const selected = document.querySelector('table').querySelector('td input:checked')
+            if(selected) {
+                const cells = Array.from(selected.parentElement.parentElement.querySelectorAll('td'))
+                normalizedAggergate.push({
+                    term: cells[0].textContent,
+                    issue_date: cells[2].textContent,
+                    maturity_date: cells[3].textContent,
+                    _classes: 'highlight'
+                })
+            }
+    
+            normalizedAggergate = normalizedAggergate.sort((a,b) => DateTime.fromFormat(a.maturity_date, 'MM-dd-yyyy').toMillis() >  DateTime.fromFormat(b.maturity_date, 'MM-dd-yyyy').toMillis() ? 1 : -1)
+    
+            if(normalizedAggergate.length > 1) normalizedAggergate[0].date_diff = 'N/A'
+            for(let i = 1; i < normalizedAggergate.length; i++) {
+                let dateDiff =luxon.Interval.fromDateTimes(DateTime.fromFormat(normalizedAggergate[i - 1].maturity_date, 'MM-dd-yyyy'), DateTime.fromFormat(normalizedAggergate[i].maturity_date, 'MM-dd-yyyy'))
+                    .toDuration(['years', 'months', 'days'])
+                    .toObject()
+    
+                for(let key of Object.keys(dateDiff)) {
+                    if(dateDiff[key] === 0)
+                    delete dateDiff[key]
+                }
+    
+                dateDiff = luxon.Duration.fromObject(dateDiff).toHuman()
+
+                if(dateDiff === '') {
+                    dateDiff = '0 days'
+                }
+
+                normalizedAggergate[i].date_diff = dateDiff
+            }
+    
+            document.querySelector('#tbill-ladder').insertAdjacentHTML('afterbegin', objectToTable(normalizedAggergate))
+        }
+        
+        document.querySelector('table').addEventListener('click', (evt) => {
+            if(evt.srcElement?.parentElement?.parentElement?.nodeName === 'TR') {
+                computeTBillLadder()
+            }
+        })
+        computeTBillLadder()
     })
 }
