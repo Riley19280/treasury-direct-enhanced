@@ -26,6 +26,23 @@ function calculateMaturityDate(issueDate, terms) {
     return maturityDate.toFormat('MM-dd-yyyy')
 }
 
+function formatIntervalDateDiff(interval) {
+    let dateDiff = interval.toDuration(['years', 'months', 'days']).toObject()
+
+    for(let key of Object.keys(dateDiff)) {
+        if(dateDiff[key] === 0)
+        delete dateDiff[key]
+    }
+
+    dateDiff = luxon.Duration.fromObject(dateDiff).toHuman()
+
+    if(dateDiff === '') {
+        dateDiff = '0 days'
+    }
+
+    return dateDiff
+}
+
 function getSecurityTermsIndexForTable(table) {
     return Array.from(table.querySelectorAll('th'))
     .findIndex(th => {
@@ -332,6 +349,7 @@ if(
 
             result.current_bill_holdings.data.map(x => {
                 normalizedAggergate.push({
+                    identifier: x['confirm_#'],
                     term: x.term,
                     issue_date: x.issue_date,
                     maturity_date: x.maturity_date,
@@ -340,6 +358,7 @@ if(
     
             result.pending_marketable_securities.data.map(x => {
                 normalizedAggergate.push({
+                    identifier: x['confirm_#'],
                     term: x.security_type.replace(/ Bill$/, ''),
                     issue_date: x.issue_date,
                     maturity_date: x.maturity_date,
@@ -350,33 +369,34 @@ if(
             if(selected) {
                 const cells = Array.from(selected.parentElement.parentElement.querySelectorAll('td'))
                 normalizedAggergate.push({
+                    identifier: 'NEW',
                     term: cells[0].textContent,
                     issue_date: cells[2].textContent,
                     maturity_date: cells[3].textContent,
                     _classes: 'highlight'
                 })
             }
+
+            // Remove duplicate identifiers
+            normalizedAggergate = normalizedAggergate.reduce((acc, x) => {
+                return acc.some(y => y.identifier === x.identifier) ? acc : [...acc, x]
+            }, [])
+            
+            // Remove already matured bills
+            normalizedAggergate = normalizedAggergate.filter((data) => {
+                return DateTime.fromFormat(data.maturity_date, 'MM-dd-yyyy').toMillis() > DateTime.now().toMillis()
+            })
     
-            normalizedAggergate = normalizedAggergate.sort((a,b) => DateTime.fromFormat(a.maturity_date, 'MM-dd-yyyy').toMillis() >  DateTime.fromFormat(b.maturity_date, 'MM-dd-yyyy').toMillis() ? 1 : -1)
-    
-            if(normalizedAggergate.length > 1) normalizedAggergate[0].date_diff = 'N/A'
+            normalizedAggergate = normalizedAggergate.sort((a,b) => DateTime.fromFormat(a.maturity_date, 'MM-dd-yyyy').toMillis() >  DateTime.fromFormat(b.maturity_date, 'MM-dd-yyyy').toMillis() ? 1 : -1) 
+
+            if(normalizedAggergate.length > 1) {
+                normalizedAggergate[0].date_diff = formatIntervalDateDiff(luxon.Interval.fromDateTimes(DateTime.now().startOf('day'), DateTime.fromFormat(normalizedAggergate[0].maturity_date, 'MM-dd-yyyy'))) + ' from now'       
+            }
+
             for(let i = 1; i < normalizedAggergate.length; i++) {
-                let dateDiff =luxon.Interval.fromDateTimes(DateTime.fromFormat(normalizedAggergate[i - 1].maturity_date, 'MM-dd-yyyy'), DateTime.fromFormat(normalizedAggergate[i].maturity_date, 'MM-dd-yyyy'))
-                    .toDuration(['years', 'months', 'days'])
-                    .toObject()
-    
-                for(let key of Object.keys(dateDiff)) {
-                    if(dateDiff[key] === 0)
-                    delete dateDiff[key]
-                }
-    
-                dateDiff = luxon.Duration.fromObject(dateDiff).toHuman()
+                let diffInterval = luxon.Interval.fromDateTimes(DateTime.fromFormat(normalizedAggergate[i - 1].maturity_date, 'MM-dd-yyyy'), DateTime.fromFormat(normalizedAggergate[i].maturity_date, 'MM-dd-yyyy'))
 
-                if(dateDiff === '') {
-                    dateDiff = '0 days'
-                }
-
-                normalizedAggergate[i].date_diff = dateDiff
+                normalizedAggergate[i].date_diff = formatIntervalDateDiff(diffInterval)
             }
     
             document.querySelector('#tbill-ladder').insertAdjacentHTML('afterbegin', objectToTable(normalizedAggergate))
