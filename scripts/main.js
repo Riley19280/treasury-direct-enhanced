@@ -340,6 +340,8 @@ if(
             }
         }
 
+console.log(result)
+
         if(failedKeys.length !== 0) return
 
         function computeTBillLadder() {
@@ -351,6 +353,7 @@ if(
                 normalizedAggergate.push({
                     identifier: x['confirm_#'],
                     term: x.term,
+                    amount: x.par_amount,
                     issue_date: x.issue_date,
                     maturity_date: x.maturity_date,
                 })
@@ -360,6 +363,7 @@ if(
                 normalizedAggergate.push({
                     identifier: x['confirm_#'],
                     term: x.security_type.replace(/ Bill$/, ''),
+                    amount: x.amount,
                     issue_date: x.issue_date,
                     maturity_date: x.maturity_date,
                 })
@@ -371,9 +375,10 @@ if(
                 normalizedAggergate.push({
                     identifier: 'NEW',
                     term: cells[0].textContent,
+                    amount: '',
                     issue_date: cells[2].textContent,
                     maturity_date: cells[3].textContent,
-                    _classes: 'highlight'
+                    _classes: 'highlight',
                 })
             }
 
