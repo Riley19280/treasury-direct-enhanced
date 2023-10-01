@@ -141,6 +141,16 @@ function objectToTable(objects) {
     return str
 }
 
+function injectStyle(css) {
+    const styleElem =  document.querySelector('head style')
+
+    if(styleElem) {
+        styleElem.insertAdjacentHTML('beforeend', `\n${css}`)
+    } else {
+        document.querySelector('head').insertAdjacentHTML('beforeend', `<style>${css}</style>`)
+    }
+}
+
 async function addLastRateToTables() {
     const buyPageType = document.querySelector('h1 + p')?.textContent.replace('Purchase a ', '').replace(/[^\w ]/g, '').toLowerCase()
 
@@ -320,7 +330,7 @@ if(
     document.querySelector('#content form').style.width = '730px'
     document.querySelector('#content').style.width = 'auto'
 
-    document.querySelector('head style').insertAdjacentHTML('beforeend', `\n #content tr.highlight { background-color: yellow; }`)
+    injectStyle('#content tr.highlight { background-color: yellow; }')
 
     document.querySelector('#content').insertAdjacentHTML('beforeend', `<div id="tbill-ladder" style="margin-left: 6px; margin-top: ${topMargin}px; flex-grow: 1; min-width: 200px;"></div>`)
 
